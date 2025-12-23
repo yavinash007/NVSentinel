@@ -58,7 +58,7 @@ all: lint-test ## Run lint-test (default target)
 generate: ## Generate CRDs and move them to Helm chart directory
 	@echo "Generating CRDs for janitor..."
 	@# Install controller-gen if not present
-	@which controller-gen > /dev/null || (echo "Installing controller-gen..." && go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest)
+	@which controller-gen > /dev/null || (echo "Installing controller-gen..." && go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION))
 	@# Generate CRDs into api/v1alpha1 directory
 	@# Note: Generated CRD YAML files do not include license headers (this is expected)
 	@# YAML files are excluded from license header checks via main Makefile: -ignore '**/*.yaml'

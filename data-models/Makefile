@@ -37,9 +37,34 @@ DOCKER_EXTRA_ARGS :=
 include ../make/common.mk
 include ../make/go.mk
 
+# API and CRD paths
+API_DIR := api/v1alpha1
+CRD_OUTPUT_DIR := $(REPO_ROOT)/distros/kubernetes/nvsentinel/crds
+
 # =============================================================================
 # MODULE-SPECIFIC TARGETS
 # =============================================================================
+
+# generate: Generate deepcopy, CRD types, and other Kubernetes boilerplate
+# Depends on tools being installed
+.PHONY: generate
+generate: ## Generate CRDs and move them to Helm chart directory
+	@echo "Generating CRDs for $(API_DIR)..."
+	@# Install controller-gen if not present
+	@which controller-gen > /dev/null || (echo "Installing controller-gen..." && \
+		go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION))
+	@# Generate deepcopy files for API types
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION) object paths=./$(API_DIR)
+	@# Generate CRDs directly into API_DIR
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION) \
+		crd paths=./$(API_DIR) output:crd:dir=./$(API_DIR)
+	@# Move generated CRDs to Helm chart directory
+	@echo "Moving generated CRDs to $(CRD_OUTPUT_DIR)..."
+	@mkdir -p $(CRD_OUTPUT_DIR)
+	@mv ./$(API_DIR)/*.yaml $(CRD_OUTPUT_DIR)/ || true
+	@echo "CRDs generated and moved to $(CRD_OUTPUT_DIR)"
+	@ls -1 $(CRD_OUTPUT_DIR)/*.yaml || echo "No CRD YAMLs generated"
+
 
 # Generate Go protobuf files for data-models (shared across all Go modules)
 .PHONY: protos-generate

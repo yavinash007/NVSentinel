@@ -46,6 +46,7 @@ go_tools:
   setup_envtest: 'latest'
   goimports: 'v0.30.0'
   crane: 'v0.20.2'
+  controller_gen: 'v0.20.0'
 
 # Protocol Buffers / gRPC
 protobuf:

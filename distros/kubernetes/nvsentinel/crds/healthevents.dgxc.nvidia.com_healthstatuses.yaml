@@ -1,0 +1,181 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: healthstatuses.healthevents.dgxc.nvidia.com
+spec:
+  group: healthevents.dgxc.nvidia.com
+  names:
+    kind: HealthStatus
+    listKind: HealthStatusList
+    plural: healthstatuses
+    singular: healthstatus
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              agent:
+                type: string
+              checkName:
+                type: string
+              componentClass:
+                type: string
+              drainOverrides:
+                properties:
+                  force:
+                    type: boolean
+                  skip:
+                    type: boolean
+                type: object
+              entitiesImpacted:
+                items:
+                  properties:
+                    entityType:
+                      type: string
+                    entityValue:
+                      type: string
+                  type: object
+                type: array
+              errorCode:
+                items:
+                  type: string
+                type: array
+              generatedTimestamp:
+                description: "A Timestamp represents a point in time independent of
+                  any time zone or local\ncalendar, encoded as a count of seconds
+                  and fractions of seconds at\nnanosecond resolution. The count is
+                  relative to an epoch at UTC midnight on\nJanuary 1, 1970, in the
+                  proleptic Gregorian calendar which extends the\nGregorian calendar
+                  backwards to year one.\n\nAll minutes are 60 seconds long. Leap
+                  seconds are \"smeared\" so that no leap\nsecond table is needed
+                  for interpretation, using a [24-hour linear\nsmear](https://developers.google.com/time/smear).\n\nThe
+                  range is from 0001-01-01T00:00:00Z to 9999-12-31T23:59:59.999999999Z.
+                  By\nrestricting to that range, we ensure that we can convert to
+                  and from [RFC\n3339](https://www.ietf.org/rfc/rfc3339.txt) date
+                  strings.\n\n# Examples\n\nExample 1: Compute Timestamp from POSIX
+                  `time()`.\n\n\tTimestamp timestamp;\n\ttimestamp.set_seconds(time(NULL));\n\ttimestamp.set_nanos(0);\n\nExample
+                  2: Compute Timestamp from POSIX `gettimeofday()`.\n\n\tstruct timeval
+                  tv;\n\tgettimeofday(&tv, NULL);\n\n\tTimestamp timestamp;\n\ttimestamp.set_seconds(tv.tv_sec);\n\ttimestamp.set_nanos(tv.tv_usec
+                  * 1000);\n\nExample 3: Compute Timestamp from Win32 `GetSystemTimeAsFileTime()`.\n\n\tFILETIME
+                  ft;\n\tGetSystemTimeAsFileTime(&ft);\n\tUINT64 ticks = (((UINT64)ft.dwHighDateTime)
+                  << 32) | ft.dwLowDateTime;\n\n\t// A Windows tick is 100 nanoseconds.
+                  Windows epoch 1601-01-01T00:00:00Z\n\t// is 11644473600 seconds
+                  before Unix epoch 1970-01-01T00:00:00Z.\n\tTimestamp timestamp;\n\ttimestamp.set_seconds((INT64)
+                  ((ticks / 10000000) - 11644473600LL));\n\ttimestamp.set_nanos((INT32)
+                  ((ticks % 10000000) * 100));\n\nExample 4: Compute Timestamp from
+                  Java `System.currentTimeMillis()`.\n\n\tlong millis = System.currentTimeMillis();\n\n\tTimestamp
+                  timestamp = Timestamp.newBuilder().setSeconds(millis / 1000)\n\t
+                  \   .setNanos((int) ((millis % 1000) * 1000000)).build();\n\nExample
+                  5: Compute Timestamp from Java `Instant.now()`.\n\n\tInstant now
+                  = Instant.now();\n\n\tTimestamp timestamp =\n\t    Timestamp.newBuilder().setSeconds(now.getEpochSecond())\n\t
+                  \       .setNanos(now.getNano()).build();\n\nExample 6: Compute
+                  Timestamp from current time in Python.\n\n\ttimestamp = Timestamp()\n\ttimestamp.GetCurrentTime()\n\n#
+                  JSON Mapping\n\nIn JSON format, the Timestamp type is encoded as
+                  a string in the\n[RFC 3339](https://www.ietf.org/rfc/rfc3339.txt)
+                  format. That is, the\nformat is \"{year}-{month}-{day}T{hour}:{min}:{sec}[.{frac_sec}]Z\"\nwhere
+                  {year} is always expressed using four digits while {month}, {day},\n{hour},
+                  {min}, and {sec} are zero-padded to two digits each. The fractional\nseconds,
+                  which can go up to 9 digits (i.e. up to 1 nanosecond resolution),\nare
+                  optional. The \"Z\" suffix indicates the timezone (\"UTC\"); the
+                  timezone\nis required. A proto3 JSON serializer should always use
+                  UTC (as indicated by\n\"Z\") when printing the Timestamp type and
+                  a proto3 JSON parser should be\nable to accept both UTC and other
+                  timezones (as indicated by an offset).\n\nFor example, \"2017-01-15T01:30:15.01Z\"
+                  encodes 15.01 seconds past\n01:30 UTC on January 15, 2017.\n\nIn
+                  JavaScript, one can convert a Date object to this format using the\nstandard\n[toISOString()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toISOString)\nmethod.
+                  In Python, a standard `datetime.datetime` object can be converted\nto
+                  this format using\n[`strftime`](https://docs.python.org/2/library/time.html#time.strftime)
+                  with\nthe time format spec '%Y-%m-%dT%H:%M:%S.%fZ'. Likewise, in
+                  Java, one can use\nthe Joda Time's [`ISODateTimeFormat.dateTime()`](\nhttp://joda-time.sourceforge.net/apidocs/org/joda/time/format/ISODateTimeFormat.html#dateTime()\n)
+                  to obtain a formatter capable of generating timestamps in this format."
+                properties:
+                  nanos:
+                    description: |-
+                      Non-negative fractions of a second at nanosecond resolution. This field is
+                      the nanosecond portion of the duration, not an alternative to seconds.
+                      Negative second values with fractions must still have non-negative nanos
+                      values that count forward in time. Must be between 0 and 999,999,999
+                      inclusive.
+                    format: int32
+                    type: integer
+                  seconds:
+                    description: |-
+                      Represents seconds of UTC time since Unix epoch 1970-01-01T00:00:00Z. Must
+                      be between -315576000000 and 315576000000 inclusive (which corresponds to
+                      0001-01-01T00:00:00Z to 9999-12-31T23:59:59Z).
+                    format: int64
+                    type: integer
+                type: object
+              isFatal:
+                type: boolean
+              isHealthy:
+                type: boolean
+              message:
+                type: string
+              metadata:
+                additionalProperties:
+                  type: string
+                type: object
+              nodeName:
+                type: string
+              quarantineOverrides:
+                properties:
+                  force:
+                    type: boolean
+                  skip:
+                    type: boolean
+                type: object
+              recommendedAction:
+                format: int32
+                type: integer
+              version:
+                format: int32
+                type: integer
+            type: object
+          status:
+            properties:
+              faultremediated:
+                type: boolean
+              lastremediationtimestamp:
+                format: date-time
+                type: string
+              nodequarantined:
+                type: string
+              userpodsevictionstatus:
+                properties:
+                  message:
+                    type: string
+                  status:
+                    type: string
+                type: object
+            required:
+            - userpodsevictionstatus
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

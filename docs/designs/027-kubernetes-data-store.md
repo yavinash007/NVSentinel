@@ -13,7 +13,11 @@ A broader datastore abstraction and multi-backend strategy is defined in the NVS
 We will introduce a Kubernetes-native HealthEvent API and implement a Kubernetes Custom Resource–backed datastore for NVSentinel that supports core event ingestion, status updates, and watch-driven remediation workflows.
 
 In the initial phase, Kubernetes CRs are considered suitable only for NVSentinel’s core, watch-oriented workflows and not for analytics or historical querying.
+## Motivations
 
+- **Avoid new database dependencies:** Deploying NVSentinel currently requires provisioning and managing an external datastore (MongoDB, PostgreSQL, etc.). A Kubernetes CR backend allows operators to run NVSentinel without introducing additional database systems.
+- **Stay Kubernetes-native:** NVSentinel should leverage Kubernetes as the primary platform. CRs make health events first-class Kubernetes resources, observable through standard Kubernetes APIs and tools.
+- **Preserve multi-backend flexibility:** This design maintains the existing datastore abstraction, allowing operators to choose their preferred backend based on their needs.
 ## Implementation
 
 ### API Definition
@@ -25,7 +29,7 @@ In the initial phase, Kubernetes CRs are considered suitable only for NVSentinel
 
 ### Directory Structure and CRD Generation
 
-- CRD generation strategy: we intend to use a proto-first generation approach (for example, [`protoc-crd-gen`](https://github.com/yandex/protoc-gen-crd)) to produce Kubernetes CRD YAML and the corresponding Go types for the `HealthEvent` `spec` directly from the `.proto` definitions. This keeps the authoritative shape of `spec` in the `.proto` files and reduces drift between proto, generated types, and handwritten types.
+- CRD generation strategy: we intend to use a proto-first generation approach (for example, [`protoc-gen-crd`](https://github.com/yandex/protoc-gen-crd)) to produce Kubernetes CRD YAML and the corresponding Go types for the `HealthEvent` `spec` directly from the `.proto` definitions. This keeps the authoritative shape of `spec` in the `.proto` files and reduces drift between proto, generated types, and handwritten types.
 
 - Spec is the `HealthEvent` proto: the `spec` of the `HealthEvent` CR should be the `HealthEvent` protobuf message. To keep generation coherent, the `status` subresource (`HealthEventStatus`) should also be defined in the `.proto` if it is expected to be generated into the CRD and accompanying types.
 

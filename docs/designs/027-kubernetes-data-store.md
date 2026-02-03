@@ -84,7 +84,7 @@ To prevent uncontrolled growth of HealthEvent CRs and reduce load on the Kuberne
 
 ### Negative
 
-- Limited querying capabilities: Historical analysis and complex queries are not feasible using only CRs.
+- Limited querying capabilities: Complex ad-hoc queries and full-featured historical analysis capabilities (beyond basic time-series metrics) are not feasible using only CRs.
 - Control plane load: High-frequency or bursty events can increase the number of CR objects, potentially impacting the API server in large clusters.
 
 ### Mitigations
@@ -110,5 +110,5 @@ To prevent uncontrolled growth of HealthEvent CRs and reduce load on the Kuberne
 
 ## References
 
-- NVSentinel Datastore Abstraction Design Document
+- [NVSentinel Datastore Abstraction Design Document](https://docs.google.com/document/d/1iD6qhWDapfb7CMCAY7sr3FB6WngdlwmSMewUDQ8gxJo/edit?tab=t.0#heading=h.lolo8bj6u6g2)
 - [K8s API Data store WIP PR](https://github.com/NVIDIA/NVSentinel/pull/640)

@@ -22,7 +22,7 @@ In the initial phase, Kubernetes CRs are considered suitable only for NVSentinel
 
 ### API Definition
 
-- API Group/Version: `healthevents.dgxc.nvidia.com/v1alpha1`
+- API Group/Version: `nvsentinel.dgxc.nvidia.com/v1alpha1`
 - Kind: `HealthEvent`
 - `spec`: contains immutable event data (from HealthEvent)
 - `status`: tracks mutable workflow state (from HealthEventStatus)
@@ -35,7 +35,7 @@ In the initial phase, Kubernetes CRs are considered suitable only for NVSentinel
 
 - Move `HealthEventStatus` into proto: currently `HealthEventStatus` exists as a handwritten Go struct in `data-models/pkg/model/health_event_extentions.go`. For proto-first CRD generation, move the `HealthEventStatus` definition into the `.proto` file so the generator emits a single, consistent CRD with both `spec` and `status` schemas. If `HealthEventStatus` remains only as a handwritten Go type, generation will produce `spec`-related types from proto while `status` remains a separate handwritten type — this creates a mix-and-match and generally forces an extra wrapper or conversion layer to assemble a complete CR type for controllers.
 
-- Implementation note: after moving `HealthEventStatus` into the `.proto`, run the proto-to-CRD generator to produce the CRD and generated Go types. Existing conversion helpers should be adapted to map between the protobuf messages, generated CRD types, and any internal model types. The remainder of the event flow (health monitors create CRs when enabled, reconcilers consume CRs and update `status`) remains the same.
+   - Implementation note: after moving `HealthEventStatus` into the `.proto`, run the proto-to-CRD generator to produce the CRD and generated Go types. Existing conversion helpers should be adapted to map between the protobuf messages, generated CRD types, and any internal model types. The event flow and responsibilities (health monitors send events to platform-connectors, which persist to the configured backend) remain unchanged.
 
 - **Future consideration — API versioning:** Generating CRDs directly from proto objects means the proto types will eventually need to follow Kubernetes API versioning rules (e.g., storage versions, conversion webhooks, backward compatibility guarantees). This is acceptable for `v1alpha1` where we can iterate freely, but as the API stabilizes toward `v1`, we should plan for more formal API versioning practices. This does not block the current proto-first approach but should be part of the v1 graduation plan.
 
@@ -48,7 +48,7 @@ In the initial phase, Kubernetes CRs are considered suitable only for NVSentinel
 1. Kubernetes CR as a pluggable datastore backend: The Kubernetes CR backend is one datastore implementation option alongside MongoDB, PostgreSQL, and others. Operators select which backend to use via Helm configuration at deployment time. Only one backend is active per deployment.
 
 2. Responsibilities and data flow with Kubernetes CR backend:
-   - **Health Monitors:** Detect events and persist them to the Kubernetes CR datastore. Monitors translate internal and protobuf-based event representations into the CR `spec` using the conversion APIs and create/update HealthEvent CRs. They handle nested types (`OperationStatus`, `BehaviourOverrides`, `Entity`) and map enumerations (`Status`, `RecommendedAction`, `ProcessingStrategy`) between model, protobuf, and CRD types.
+   - **Health Monitors → Platform Connectors → Datastore:** Health monitors detect events and forward them to the `platform-connectors` component (gRPC). The `platform-connectors` service is responsible for validating and persisting events to the configured datastore backend. When the Kubernetes CR backend is selected, `platform-connectors` will create/update `HealthEvent` CRs. This preserves the current responsibility model — health monitors do not write directly to the datastore. This is the current data flow (Health Monitors → Platform Connectors → Datastore) and will remain unchanged by the CR backend introduction.
    - **FaultRemediationReconciler and controllers:** Consume HealthEvent CRs via watches. Controllers use the CR `spec` as immutable event data and update the CR `status` subresource to reflect mutable workflow state (node quarantine status, pod eviction progress, remediation timestamps).
 
 3. Operators or additional controllers can act on the CR data to determine remediation actions independently, providing flexibility and separation between event ingestion and execution.
@@ -58,7 +58,7 @@ In the initial phase, Kubernetes CRs are considered suitable only for NVSentinel
 - **Kubernetes CR as a datastore backend:** The CR backend is a pluggable datastore option. Operators choose which backend to deploy via Helm configuration — either Kubernetes CRs or MongoDB (or another backend). Only one backend is active per deployment.
 - **Existing datastore abstraction pattern:** The multi-datastore pattern is already established in NVSentinel (e.g., PostgreSQL and MongoDB backends). The Kubernetes CR backend follows the same abstraction approach. Implementation requires implementing the datastore interface (see [#456](https://github.com/NVIDIA/NVSentinel/pull/456) as a reference for adding a new datastore backend).
 - **No MongoDB-specific changes:** The existing MongoDB-backed implementation remains unchanged and fully functional.
-- **Health Monitors and Controllers:** When using the Kubernetes CR backend, monitors detect events and create CRs with immutable `spec`. Controllers consume CRs via watches and update CR `status` to track workflow state. When using MongoDB, the flow remains as-is.
+   - **Health Monitors and Controllers:** When using the Kubernetes CR backend, health monitors send events to `platform-connectors`, which create CRs with immutable `spec`. Controllers consume CRs via watches and update CR `status` to track workflow state. When using MongoDB, the flow remains as described above.
 - **Existing remediation logic:** Log collection, state management, and remediation remain functionally the same regardless of which backend is deployed.
 - **Proto migration coordination:** Moving `HealthEventStatus` from `data-models/pkg/model/health_event_extentions.go` into the `.proto` definition requires regenerating the proto files and updating all components (health monitors, controllers, store-client, converters, etc.) that currently depend on the old struct. This change must be coordinated across all affected modules to ensure they consume the new generated types.
 

@@ -117,10 +117,8 @@ func (r *FaultRemediationReconciler) Reconcile(
 	nodeName := healthEventWithStatus.HealthEvent.NodeName
 	nodeQuarantined := healthEventWithStatus.HealthEventStatus.NodeQuarantined
 
-	if nodeQuarantined != nil {
-		if *nodeQuarantined == model.UnQuarantined || *nodeQuarantined == model.Cancelled {
-			return r.handleCancellationEvent(ctx, nodeName, *nodeQuarantined, r.Watcher, event.ResumeToken)
-		}
+	if nodeQuarantined == string(model.UnQuarantined) || nodeQuarantined == string(model.Cancelled) {
+		return r.handleCancellationEvent(ctx, nodeName, model.Status(nodeQuarantined), r.Watcher, event.ResumeToken)
 	}
 
 	return r.handleRemediationEvent(ctx, &healthEventWithStatus, *event, r.Watcher, r.healthEventStore)
@@ -138,8 +136,8 @@ func (r *FaultRemediationReconciler) shouldSkipEvent(ctx context.Context,
 		return true
 	}
 
-	if healthEventWithStatus.HealthEventStatus.FaultRemediated != nil &&
-		*healthEventWithStatus.HealthEventStatus.FaultRemediated {
+	if healthEventWithStatus.HealthEventStatus != nil && healthEventWithStatus.HealthEventStatus.FaultRemediated != nil &&
+		healthEventWithStatus.HealthEventStatus.FaultRemediated.GetValue() {
 		return true
 	}
 

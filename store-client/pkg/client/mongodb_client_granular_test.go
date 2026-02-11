@@ -67,8 +67,12 @@ func TestBuildStructFieldUpdates(t *testing.T) {
 		result := c.buildStructFieldUpdates("healtheventstatus", status)
 
 		expected := bson.M{
-			"healtheventstatus.faultremediated":          true,
-			"healtheventstatus.lastremediationtimestamp": now,
+			"healtheventstatus.faultremediated": map[string]interface{}{
+				"value": true,
+			},
+			"healtheventstatus.lastremediationtimestamp": map[string]interface{}{
+				"seconds": now.Unix(), "nanos": int32(now.Nanosecond()), //nolint:gosec // Nanosecond() returns 0-999999999, fits int32
+			},
 		}
 
 		assert.Equal(t, expected, result)
@@ -94,8 +98,12 @@ func TestBuildStructFieldUpdates(t *testing.T) {
 			"healtheventstatus.nodequarantined":                string(datastore.Quarantined),
 			"healtheventstatus.userpodsevictionstatus.status":  string(datastore.StatusSucceeded),
 			"healtheventstatus.userpodsevictionstatus.message": "test message",
-			"healtheventstatus.faultremediated":                true,
-			"healtheventstatus.lastremediationtimestamp":       now,
+			"healtheventstatus.faultremediated": map[string]interface{}{
+				"value": true,
+			},
+			"healtheventstatus.lastremediationtimestamp": map[string]interface{}{
+				"seconds": now.Unix(), "nanos": int32(now.Nanosecond()), //nolint:gosec // Nanosecond() returns 0-999999999, fits int32
+			},
 		}
 
 		assert.Equal(t, expected, result)

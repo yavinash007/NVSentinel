@@ -42,6 +42,7 @@ import (
 	nvstoreclient "github.com/nvidia/nvsentinel/store-client/pkg/client"
 	"github.com/nvidia/nvsentinel/store-client/pkg/datastore"
 	"github.com/nvidia/nvsentinel/store-client/pkg/utils"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type ReconcilerConfig struct {
@@ -442,7 +443,7 @@ func (r *FaultRemediationReconciler) updateNodeRemediatedStatus(
 	// If remediation was successful, set the timestamp
 	if nodeRemediatedStatus {
 		now := time.Now().UTC()
-		status.LastRemediationTimestamp = &now
+		status.LastRemediationTimestamp = timestamppb.New(now)
 	}
 
 	// Use the healthEventStore to update the status with retries

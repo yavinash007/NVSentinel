@@ -20,6 +20,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.mongodb.org/mongo-driver/bson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/nvidia/nvsentinel/store-client/pkg/datastore"
 )
@@ -61,7 +62,7 @@ func TestBuildStructFieldUpdates(t *testing.T) {
 		now := time.Now().UTC()
 		status := datastore.HealthEventStatus{
 			FaultRemediated:          &faultRemediated,
-			LastRemediationTimestamp: &now,
+			LastRemediationTimestamp: timestamppb.New(now),
 		}
 
 		result := c.buildStructFieldUpdates("healtheventstatus", status)
@@ -89,7 +90,7 @@ func TestBuildStructFieldUpdates(t *testing.T) {
 				Message: "test message",
 			},
 			FaultRemediated:          &faultRemediated,
-			LastRemediationTimestamp: &now,
+			LastRemediationTimestamp: timestamppb.New(now),
 		}
 
 		result := c.buildStructFieldUpdates("healtheventstatus", status)

@@ -20,6 +20,7 @@ import (
 	"log/slog"
 
 	"github.com/nvidia/nvsentinel/store-client/pkg/datastore"
+	"github.com/nvidia/nvsentinel/store-client/pkg/datastore/providers/kubernetes"
 	"github.com/nvidia/nvsentinel/store-client/pkg/datastore/providers/mongodb"
 	"github.com/nvidia/nvsentinel/store-client/pkg/datastore/providers/postgresql"
 )
@@ -74,6 +75,14 @@ func CreateChangeStreamWatcher(
 		}
 
 		return datastore.NewChangeStreamWatcher(ctx, postgresConfig)
+
+	case *kubernetes.KubernetesDataStore:
+		k8sConfig := map[string]interface{}{
+			"ClientName": config.ClientName,
+			"Pipeline":   config.Pipeline,
+		}
+
+		return datastore.NewChangeStreamWatcher(ctx, k8sConfig)
 
 	default:
 		return nil, fmt.Errorf("change stream watching not supported for datastore type: %T", datastore)

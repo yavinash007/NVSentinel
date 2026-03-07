@@ -26,6 +26,7 @@ type DataStoreProvider string
 const (
 	ProviderMongoDB    DataStoreProvider = "mongodb"
 	ProviderPostgreSQL DataStoreProvider = "postgresql"
+	ProviderKubernetes DataStoreProvider = "kubernetes"
 )
 
 // Event represents a database-agnostic document or event as a map.

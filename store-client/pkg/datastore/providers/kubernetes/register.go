@@ -12,11 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package providers
+package kubernetes
 
-// Import all providers to ensure they are registered
 import (
-	_ "github.com/nvidia/nvsentinel/store-client/pkg/datastore/providers/kubernetes"
-	_ "github.com/nvidia/nvsentinel/store-client/pkg/datastore/providers/mongodb"
-	_ "github.com/nvidia/nvsentinel/store-client/pkg/datastore/providers/postgresql"
+	"context"
+	"log/slog"
+
+	"github.com/nvidia/nvsentinel/store-client/pkg/datastore"
 )
+
+func init() {
+	slog.Info("Registering Kubernetes datastore provider")
+	datastore.RegisterProvider(datastore.ProviderKubernetes, NewKubernetesDataStore)
+}
+
+// NewKubernetesDataStore creates a new Kubernetes datastore instance from configuration.
+func NewKubernetesDataStore(ctx context.Context, config datastore.DataStoreConfig) (datastore.DataStore, error) {
+	return NewKubernetesStore(ctx, config)
+}

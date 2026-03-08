@@ -264,7 +264,9 @@ func initializeConnectors(
 	}
 
 	// Keep the legacy config key name for backward compatibility with existing ConfigMaps
-	if config["enableMongoDBStorePlatformConnector"] == True || config["enablePostgresDBStorePlatformConnector"] == True {
+	if config["enableMongoDBStorePlatformConnector"] == True ||
+		config["enablePostgresDBStorePlatformConnector"] == True ||
+		config["enableK8sStorePlatformConnector"] == True {
 		storeConnector, err = initializeDatabaseStoreConnector(ctx, config, databaseClientCertMountPath)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize database store connector: %w", err)

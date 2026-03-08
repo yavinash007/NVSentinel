@@ -17,9 +17,26 @@ package model
 import (
 	"github.com/nvidia/nvsentinel/data-models/pkg/protos"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"google.golang.org/protobuf/proto"
 )
 
-// HealthEventResourceCRD is the Kubernetes CRD type for HealthEventResource
+// CRD coordinates for HealthEventResource
+var (
+	HealthEventResourceGVK = schema.GroupVersionKind{
+		Group:   "healthevents.dgxc.nvidia.com",
+		Version: "v1",
+		Kind:    "HealthEventResource",
+	}
+
+	SchemeGroupVersion = schema.GroupVersion{
+		Group:   HealthEventResourceGVK.Group,
+		Version: HealthEventResourceGVK.Version,
+	}
+)
+
+// HealthEventResourceCRD is the Kubernetes CRD type for HealthEventResource.
 // Spec and Status are generated from the proto definitions.
 type HealthEventResourceCRD struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -28,10 +45,60 @@ type HealthEventResourceCRD struct {
 	Status            *protos.HealthEventStatus `json:"status,omitempty"`
 }
 
-// HealthEventResourceCRDList is the list type for HealthEventResourceCRD
-// (optional, but useful for List operations)
+func (in *HealthEventResourceCRD) DeepCopyObject() runtime.Object {
+	if in == nil {
+		return nil
+	}
+
+	out := &HealthEventResourceCRD{}
+	out.TypeMeta = in.TypeMeta
+	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+
+	if in.Spec != nil {
+		out.Spec = proto.Clone(in.Spec).(*protos.HealthEvent)
+	}
+
+	if in.Status != nil {
+		out.Status = proto.Clone(in.Status).(*protos.HealthEventStatus)
+	}
+
+	return out
+}
+
+// HealthEventResourceCRDList is the list type for HealthEventResourceCRD.
 type HealthEventResourceCRDList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []HealthEventResourceCRD `json:"items"`
+}
+
+func (in *HealthEventResourceCRDList) DeepCopyObject() runtime.Object {
+	if in == nil {
+		return nil
+	}
+
+	out := &HealthEventResourceCRDList{}
+	out.TypeMeta = in.TypeMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
+
+	if in.Items != nil {
+		out.Items = make([]HealthEventResourceCRD, len(in.Items))
+		for i := range in.Items {
+			cp := in.Items[i].DeepCopyObject().(*HealthEventResourceCRD)
+			out.Items[i] = *cp
+		}
+	}
+
+	return out
+}
+
+// AddToScheme registers the HealthEventResource types with the given scheme.
+func AddToScheme(scheme *runtime.Scheme) error {
+	scheme.AddKnownTypes(SchemeGroupVersion,
+		&HealthEventResourceCRD{},
+		&HealthEventResourceCRDList{},
+	)
+	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
+
+	return nil
 }

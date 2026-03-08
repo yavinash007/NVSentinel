@@ -25,6 +25,7 @@ import (
 	"github.com/nvidia/nvsentinel/store-client/pkg/client"
 	"github.com/nvidia/nvsentinel/store-client/pkg/config"
 	"github.com/nvidia/nvsentinel/store-client/pkg/datastore"
+	providers_kubernetes "github.com/nvidia/nvsentinel/store-client/pkg/datastore/providers/kubernetes"
 	providers_postgresql "github.com/nvidia/nvsentinel/store-client/pkg/datastore/providers/postgresql"
 )
 
@@ -102,6 +103,24 @@ func (f *ClientFactory) CreateDatabaseClient(ctx context.Context) (client.Databa
 
 		return providers_postgresql.NewPostgreSQLDatabaseClient(db, tableName), nil
 
+	case string(datastore.ProviderKubernetes):
+		dsConfig, err := datastore.LoadDatastoreConfig()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load Kubernetes datastore config: %w", err)
+		}
+
+		ds, err := datastore.NewDataStore(ctx, *dsConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Kubernetes datastore: %w", err)
+		}
+
+		k8sDS, ok := ds.(*providers_kubernetes.KubernetesDataStore)
+		if !ok {
+			return nil, fmt.Errorf("unexpected datastore type for kubernetes provider: %T", ds)
+		}
+
+		return k8sDS.GetDatabaseClient(), nil
+
 	case string(datastore.ProviderMongoDB), "":
 		// Default to MongoDB for backward compatibility
 		return client.NewMongoDBClient(ctx, f.dbConfig)
@@ -111,7 +130,7 @@ func (f *ClientFactory) CreateDatabaseClient(ctx context.Context) (client.Databa
 			datastore.DataStoreProvider(provider),
 			"unsupported datastore provider",
 			fmt.Errorf("provider '%s' is not supported", provider),
-		).WithMetadata("supportedProviders", []string{"mongodb", "postgresql"})
+		).WithMetadata("supportedProviders", []string{"mongodb", "postgresql", "kubernetes"})
 	}
 }
 

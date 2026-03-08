@@ -14,21 +14,13 @@
 
 package kubernetes
 
-import (
-	"context"
-	"log/slog"
+import "time"
 
-	"github.com/nvidia/nvsentinel/store-client/pkg/datastore"
-)
+func parseTime(s string) (time.Time, error) {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Parse(time.RFC3339Nano, s)
+	}
 
-// init automatically registers the Kubernetes provider with the global registry
-func init() {
-	slog.Info("Registering Kubernetes datastore provider")
-	datastore.RegisterProvider(datastore.ProviderKubernetes, NewKubernetesDataStore)
-}
-
-// NewKubernetesDataStore creates a new Kubernetes datastore instance from configuration
-func NewKubernetesDataStore(ctx context.Context, config datastore.DataStoreConfig) (datastore.DataStore, error) {
-	// Create the Kubernetes store that implements the DataStore interface
-	return NewKubernetesStore(ctx, config)
+	return t, nil
 }

@@ -87,3 +87,21 @@ Collect all unique API groups and their associated resources from multi-template
   - get
   - list
   - watch
+- apiGroups:
+  - healthevents.dgxc.nvidia.com
+  resources:
+  - healtheventresources
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+- apiGroups:
+  - healthevents.dgxc.nvidia.com
+  resources:
+  - healtheventresources/status
+  verbs:
+  - get
+  - update
+  - patch

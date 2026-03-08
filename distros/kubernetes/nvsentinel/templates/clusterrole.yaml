@@ -56,3 +56,23 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - healthevents.dgxc.nvidia.com
+  resources:
+  - healtheventresources
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - healthevents.dgxc.nvidia.com
+  resources:
+  - healtheventresources/status
+  verbs:
+  - get
+  - update
+  - patch

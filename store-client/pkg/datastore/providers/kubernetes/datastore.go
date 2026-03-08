@@ -19,26 +19,27 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/nvidia/nvsentinel/data-models/pkg/model"
 	"github.com/nvidia/nvsentinel/store-client/pkg/client"
 	"github.com/nvidia/nvsentinel/store-client/pkg/datastore"
 
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // KubernetesDataStore implements the DataStore interface using Kubernetes CRs as the backing store.
 // HealthEvent data is stored as HealthEventResource custom resources in the cluster's etcd
 // via the Kubernetes API server, eliminating external database dependencies.
 type KubernetesDataStore struct {
-	clientset        kubernetes.Interface
-	dynamicClient    dynamic.Interface
+	k8sClient        crclient.WithWatch
 	namespace        string
 	healthEventStore datastore.HealthEventStore
 	databaseClient   *KubernetesDatabaseClient
 }
 
-// NewKubernetesStore creates a new Kubernetes datastore.
+// NewKubernetesStore creates a new Kubernetes datastore backed by controller-runtime's typed client.
 func NewKubernetesStore(ctx context.Context, config datastore.DataStoreConfig) (datastore.DataStore, error) {
 	namespace := config.Options["namespace"]
 	if namespace == "" {
@@ -50,24 +51,23 @@ func NewKubernetesStore(ctx context.Context, config datastore.DataStoreConfig) (
 		return nil, fmt.Errorf("failed to build Kubernetes REST config: %w", err)
 	}
 
-	clientset, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Kubernetes clientset: %w", err)
+	scheme := runtime.NewScheme()
+	if err := model.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to register HealthEventResource types: %w", err)
 	}
 
-	dynClient, err := dynamic.NewForConfig(restConfig)
+	k8sClient, err := crclient.NewWithWatch(restConfig, crclient.Options{Scheme: scheme})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Kubernetes dynamic client: %w", err)
+		return nil, fmt.Errorf("failed to create controller-runtime client: %w", err)
 	}
 
 	store := &KubernetesDataStore{
-		clientset:     clientset,
-		dynamicClient: dynClient,
-		namespace:     namespace,
+		k8sClient: k8sClient,
+		namespace: namespace,
 	}
 
-	store.healthEventStore = NewKubernetesHealthEventStore(dynClient, namespace)
-	store.databaseClient = NewKubernetesDatabaseClient(dynClient, namespace)
+	store.healthEventStore = NewKubernetesHealthEventStore(k8sClient, namespace)
+	store.databaseClient = NewKubernetesDatabaseClient(k8sClient, namespace)
 
 	slog.Info("Successfully created Kubernetes datastore", "namespace", namespace)
 
@@ -85,12 +85,17 @@ func (k *KubernetesDataStore) HealthEventStore() datastore.HealthEventStore {
 	return k.healthEventStore
 }
 
-// Ping tests the Kubernetes API server connection.
+// Ping tests the Kubernetes API server connection by performing a lightweight List.
 func (k *KubernetesDataStore) Ping(ctx context.Context) error {
-	_, err := k.clientset.Discovery().ServerVersion()
-	if err != nil {
+	slog.Debug("Pinging Kubernetes API server", "namespace", k.namespace)
+
+	list := &model.HealthEventResourceCRDList{}
+	if err := k.k8sClient.List(ctx, list, crclient.InNamespace(k.namespace), crclient.Limit(1)); err != nil {
+		slog.Error("Kubernetes API server ping failed", "error", err)
 		return datastore.NewConnectionError(datastore.ProviderKubernetes, "failed to ping Kubernetes API server", err)
 	}
+
+	slog.Debug("Kubernetes API server ping succeeded")
 
 	return nil
 }
@@ -114,18 +119,17 @@ func (k *KubernetesDataStore) GetDatabaseClient() client.DatabaseClient {
 
 // CreateChangeStreamWatcher creates a Kubernetes watch-based watcher that implements
 // the same change-stream semantics as MongoDB/PostgreSQL.
-// The clientName and pipeline parameters are accepted for interface compatibility
-// but pipeline filtering is handled differently in the Kubernetes provider.
 func (k *KubernetesDataStore) CreateChangeStreamWatcher(
 	ctx context.Context, clientName string, pipeline interface{},
 ) (datastore.ChangeStreamWatcher, error) {
-	watcher := NewKubernetesChangeStreamWatcher(k.dynamicClient, k.namespace, clientName)
+	slog.Info("Creating change stream watcher", "clientName", clientName, "namespace", k.namespace)
+
+	watcher := NewKubernetesChangeStreamWatcher(k.k8sClient, k.namespace, clientName)
 
 	return watcher, nil
 }
 
 // NewChangeStreamWatcher creates a watcher from a generic config map.
-// Matches the interface used by the datastore abstraction layer.
 func (k *KubernetesDataStore) NewChangeStreamWatcher(
 	ctx context.Context, config interface{},
 ) (datastore.ChangeStreamWatcher, error) {
@@ -152,18 +156,31 @@ func (k *KubernetesDataStore) NewChangeStreamWatcher(
 }
 
 // buildRESTConfig builds a Kubernetes REST config from the datastore config.
-// When running inside a cluster, uses in-cluster config.
-// The config.Connection.Host can optionally override the API server URL.
+// Priority: explicit host > in-cluster config > ~/.kube/config (for local dev).
 func buildRESTConfig(config datastore.DataStoreConfig) (*rest.Config, error) {
 	if config.Connection.Host != "" {
+		slog.Info("Using explicit Kubernetes API server host", "host", config.Connection.Host)
+
 		return &rest.Config{
 			Host: config.Connection.Host,
 		}, nil
 	}
 
 	restConfig, err := rest.InClusterConfig()
+	if err == nil {
+		slog.Info("Using in-cluster Kubernetes config")
+		return restConfig, nil
+	}
+
+	slog.Info("Not running in-cluster, falling back to kubeconfig")
+
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{}
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+
+	restConfig, err = kubeConfig.ClientConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get in-cluster config (not running in a cluster?): %w", err)
+		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 
 	return restConfig, nil

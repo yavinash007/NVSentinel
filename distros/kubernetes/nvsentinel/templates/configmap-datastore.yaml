@@ -23,6 +23,7 @@ metadata:
 data:
   datastore.yaml: |
     provider: {{ .Values.global.datastore.provider | quote }}
+    {{- if .Values.global.datastore.connection }}
     connection:
       host: {{ .Values.global.datastore.connection.host | quote }}
       port: {{ .Values.global.datastore.connection.port | default 5432 }}
@@ -46,13 +47,18 @@ data:
       extraParams:
         {{- toYaml .Values.global.datastore.connection.extraParams | nindent 8 }}
       {{- end }}
+    {{- end }}
     {{- if .Values.global.datastore.options }}
     options:
       {{- toYaml .Values.global.datastore.options | nindent 6 }}
     {{- end }}
+    {{- if .Values.global.datastore.namespace }}
+    namespace: {{ .Values.global.datastore.namespace | quote }}
+    {{- end }}
 
   # Environment variables for components
   DATASTORE_PROVIDER: {{ .Values.global.datastore.provider | quote }}
+  {{- if .Values.global.datastore.connection }}
   DATASTORE_HOST: {{ .Values.global.datastore.connection.host | quote }}
   DATASTORE_PORT: {{ .Values.global.datastore.connection.port | default 5432 | quote }}
   DATASTORE_DATABASE: {{ .Values.global.datastore.connection.database | quote }}
@@ -71,16 +77,20 @@ data:
   {{- if .Values.global.datastore.connection.sslrootcert }}
   DATASTORE_SSLROOTCERT: {{ .Values.global.datastore.connection.sslrootcert | quote }}
   {{- end }}
+  {{- end }}
+  {{- if .Values.global.datastore.namespace }}
+  DATASTORE_NAMESPACE: {{ .Values.global.datastore.namespace | quote }}
+  {{- end }}
 
   # Certificate rotation configuration (MongoDB only)
   # When enabled, client certificates can be rotated without restarting pods
-  {{- if eq .Values.global.datastore.provider "mongodb" }}
+  {{- if and .Values.global.datastore.connection (eq .Values.global.datastore.provider "mongodb") }}
   MONGODB_ENABLE_CERT_ROTATION: {{ .Values.global.certificateRotationEnabled | default false | quote }}
   {{- end }}
 
   # Legacy MongoDB environment variables for backward compatibility
   # These are set for all providers to support legacy code paths that still use the old config system
-  {{- if eq .Values.global.datastore.provider "mongodb" }}
+  {{- if and .Values.global.datastore.connection (eq .Values.global.datastore.provider "mongodb") }}
   {{- $mongodbURI := printf "mongodb://%s:%d/" .Values.global.datastore.connection.host (int (.Values.global.datastore.connection.port | default 27017)) }}
   {{- if .Values.global.datastore.connection.extraParams }}
   {{- $params := list }}
@@ -94,13 +104,17 @@ data:
   # For non-MongoDB datastores, set empty MongoDB URI
   MONGODB_URI: ""
   {{- end }}
+  {{- if and .Values.global.datastore.connection .Values.global.datastore.connection.database }}
   MONGODB_DATABASE_NAME: {{ .Values.global.datastore.connection.database | quote }}
-  {{- if .Values.global.datastore.connection.collection }}
+  {{- else }}
+  MONGODB_DATABASE_NAME: ""
+  {{- end }}
+  {{- if and .Values.global.datastore.connection .Values.global.datastore.connection.collection }}
   MONGODB_COLLECTION_NAME: {{ .Values.global.datastore.connection.collection | quote }}
   {{- else }}
   MONGODB_COLLECTION_NAME: "health_events"
   {{- end }}
-  {{- if .Values.global.datastore.connection.tokenCollection }}
+  {{- if and .Values.global.datastore.connection .Values.global.datastore.connection.tokenCollection }}
   MONGODB_TOKEN_COLLECTION_NAME: {{ .Values.global.datastore.connection.tokenCollection | quote }}
   {{- else }}
   MONGODB_TOKEN_COLLECTION_NAME: "ResumeTokens"

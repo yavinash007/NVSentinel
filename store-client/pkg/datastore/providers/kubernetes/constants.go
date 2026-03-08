@@ -14,21 +14,10 @@
 
 package kubernetes
 
-import (
-	"context"
-	"log/slog"
+const (
+	labelNodeName  = "healthevents.dgxc.nvidia.com/node-name"
+	labelCheckName = "healthevents.dgxc.nvidia.com/check-name"
+	labelAgent     = "healthevents.dgxc.nvidia.com/agent"
 
-	"github.com/nvidia/nvsentinel/store-client/pkg/datastore"
+	originalHealthEventTimestamp = "healthevents.dgxc.nvidia.com/original-health-event-timestamp"
 )
-
-// init automatically registers the Kubernetes provider with the global registry
-func init() {
-	slog.Info("Registering Kubernetes datastore provider")
-	datastore.RegisterProvider(datastore.ProviderKubernetes, NewKubernetesDataStore)
-}
-
-// NewKubernetesDataStore creates a new Kubernetes datastore instance from configuration
-func NewKubernetesDataStore(ctx context.Context, config datastore.DataStoreConfig) (datastore.DataStore, error) {
-	// Create the Kubernetes store that implements the DataStore interface
-	return NewKubernetesStore(ctx, config)
-}

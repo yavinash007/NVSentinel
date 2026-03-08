@@ -27,7 +27,8 @@ data:
       "MaxNodeConditionMessageLength": {{ .Values.platformConnector.k8sConnector.maxNodeConditionMessageLength }},
       "StoreConnectorMaxRetries": {{ .Values.platformConnector.mongodbStore.maxRetries }},
       "enableMongoDBStorePlatformConnector": "{{ .Values.global.mongodbStore.enabled }}",
-      "enablePostgresDBStorePlatformConnector": {{ if and .Values.global.datastore .Values.global.datastore.provider }}{{ eq .Values.global.datastore.provider "postgresql" | quote }}{{ else }}"false"{{ end }}
+      "enablePostgresDBStorePlatformConnector": {{ if and .Values.global.datastore .Values.global.datastore.provider }}{{ eq .Values.global.datastore.provider "postgresql" | quote }}{{ else }}"false"{{ end }},
+      "enableK8sStorePlatformConnector": {{ if and .Values.global.datastore .Values.global.datastore.provider }}{{ eq .Values.global.datastore.provider "kubernetes" | quote }}{{ else }}"false"{{ end }}
       {{- with .Values.platformConnector.pipeline }}
       ,"pipeline": {{ . | toJson }}
       {{- end }}

@@ -179,6 +179,10 @@ func loadOptionsFromEnv(config *DataStoreConfig) {
 	if maxIdle := os.Getenv("DATASTORE_MAX_IDLE_CONNECTIONS"); maxIdle != "" {
 		config.Options["maxIdleConnections"] = maxIdle
 	}
+
+	if namespace := os.Getenv("DATASTORE_NAMESPACE"); namespace != "" {
+		config.Options["namespace"] = namespace
+	}
 }
 
 // loadConfigFromYAMLString loads configuration from YAML string

@@ -26,13 +26,16 @@ update_settings(
 num_gpu_nodes = int(os.getenv('NUM_GPU_NODES', '50'))
 num_kata_test_nodes = int(os.getenv('NUM_KATA_TEST_NODES', '5'))
 use_postgresql = os.getenv('USE_POSTGRESQL', '0') == '1'
+use_kubernetes = os.getenv('USE_KUBERNETES', '0') == '1'
 user_values_file = os.getenv('NVSENTINEL_VALUES_FILE', '')
 print_values = os.getenv('PRINT_HELM_VALUES', '0') == '1'
 
-if use_postgresql:
+if use_kubernetes:
+    print("Using Kubernetes CRDs as datastore (USE_KUBERNETES=1)")
+elif use_postgresql:
     print("Using PostgreSQL as datastore (USE_POSTGRESQL=1)")
 else:
-    print("Using MongoDB as datastore (default). Set USE_POSTGRESQL=1 to use PostgreSQL.")
+    print("Using MongoDB as datastore (default). Set USE_POSTGRESQL=1 or USE_KUBERNETES=1 to switch.")
 
 helm_repo('jetstack', 'https://charts.jetstack.io')
 helm_resource(
@@ -137,7 +140,9 @@ values_files = [
 ]
 
 # Add datastore-specific values
-if use_postgresql:
+if use_kubernetes:
+    values_files.append('../distros/kubernetes/nvsentinel/values-tilt-kubernetes.yaml')
+elif use_postgresql:
     values_files.append('../distros/kubernetes/nvsentinel/values-tilt-postgresql.yaml')
 else:
     values_files.append('../distros/kubernetes/nvsentinel/values-tilt-mongodb.yaml')

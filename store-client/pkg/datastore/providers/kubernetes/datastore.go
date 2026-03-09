@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/nvidia/nvsentinel/data-models/pkg/model"
 	"github.com/nvidia/nvsentinel/store-client/pkg/client"
@@ -155,35 +156,34 @@ func (k *KubernetesDataStore) NewChangeStreamWatcher(
 	return k.CreateChangeStreamWatcher(ctx, clientName, pipeline)
 }
 
-// buildRESTConfig builds a Kubernetes REST config from the datastore config.
-// Priority: explicit host > in-cluster config > ~/.kube/config (for local dev).
+// buildRESTConfig builds a Kubernetes REST config.
+// Priority: in-cluster config > ~/.kube/config (for local dev) > explicit DATASTORE_HOST.
 func buildRESTConfig(config datastore.DataStoreConfig) (*rest.Config, error) {
-	if config.Connection.Host != "" {
-		slog.Info("Using explicit Kubernetes API server host", "host", config.Connection.Host)
-
-		return &rest.Config{
-			Host: config.Connection.Host,
-		}, nil
-	}
-
 	restConfig, err := rest.InClusterConfig()
 	if err == nil {
 		slog.Info("Using in-cluster Kubernetes config")
 		return restConfig, nil
 	}
 
-	slog.Info("Not running in-cluster, falling back to kubeconfig")
+	slog.Info("Not running in-cluster, falling back to kubeconfig", "inClusterErr", err)
 
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	configOverrides := &clientcmd.ConfigOverrides{}
 	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
 
 	restConfig, err = kubeConfig.ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
+	if err == nil {
+		slog.Info("Using kubeconfig")
+		return restConfig, nil
 	}
 
-	return restConfig, nil
+	explicitHost := os.Getenv("DATASTORE_HOST")
+	if explicitHost != "" {
+		slog.Info("Using explicit Kubernetes API server host from DATASTORE_HOST", "host", explicitHost)
+		return &rest.Config{Host: explicitHost}, nil
+	}
+
+	return nil, fmt.Errorf("failed to build Kubernetes REST config: no in-cluster config, kubeconfig, or DATASTORE_HOST available")
 }
 
 var _ datastore.DataStore = (*KubernetesDataStore)(nil)

@@ -89,7 +89,9 @@ data:
   {{- end }}
 
   # Legacy MongoDB environment variables for backward compatibility
-  # These are set for all providers to support legacy code paths that still use the old config system
+  # These must be non-empty even for non-MongoDB providers because several components
+  # call TokenConfigFromEnv() at startup which requires MONGODB_DATABASE_NAME and
+  # MONGODB_TOKEN_COLLECTION_NAME to be set (used for change stream resume tokens).
   {{- if and .Values.global.datastore.connection (eq .Values.global.datastore.provider "mongodb") }}
   {{- $mongodbURI := printf "mongodb://%s:%d/" .Values.global.datastore.connection.host (int (.Values.global.datastore.connection.port | default 27017)) }}
   {{- if .Values.global.datastore.connection.extraParams }}
@@ -101,13 +103,12 @@ data:
   {{- end }}
   MONGODB_URI: {{ $mongodbURI | quote }}
   {{- else }}
-  # For non-MongoDB datastores, set empty MongoDB URI
-  MONGODB_URI: ""
+  MONGODB_URI: "unused"
   {{- end }}
   {{- if and .Values.global.datastore.connection .Values.global.datastore.connection.database }}
   MONGODB_DATABASE_NAME: {{ .Values.global.datastore.connection.database | quote }}
   {{- else }}
-  MONGODB_DATABASE_NAME: ""
+  MONGODB_DATABASE_NAME: "nvsentinel"
   {{- end }}
   {{- if and .Values.global.datastore.connection .Values.global.datastore.connection.collection }}
   MONGODB_COLLECTION_NAME: {{ .Values.global.datastore.connection.collection | quote }}

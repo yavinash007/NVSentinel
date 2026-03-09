@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/nvidia/nvsentinel/data-models/pkg/model"
 	"github.com/nvidia/nvsentinel/data-models/pkg/protos"
@@ -32,16 +33,16 @@ import (
 // This provides backward compatibility with consumers that still use the legacy
 // DatabaseClient interface (platform-connector InsertMany, fault-quarantine queries, etc.).
 type KubernetesDatabaseClient struct {
-	client    crclient.Client
+	client    crclient.WithWatch
 	namespace string
 }
 
 // NewKubernetesDatabaseClient creates a new Kubernetes database client.
-func NewKubernetesDatabaseClient(client crclient.Client, namespace string) *KubernetesDatabaseClient {
+func NewKubernetesDatabaseClient(k8sClient crclient.WithWatch, namespace string) *KubernetesDatabaseClient {
 	slog.Info("Creating Kubernetes database client", "namespace", namespace)
 
 	return &KubernetesDatabaseClient{
-		client:    client,
+		client:    k8sClient,
 		namespace: namespace,
 	}
 }
@@ -193,41 +194,85 @@ func (k *KubernetesDatabaseClient) UpsertDocument(
 func (k *KubernetesDatabaseClient) FindOne(
 	ctx context.Context, filter interface{}, options *client.FindOneOptions,
 ) (client.SingleResult, error) {
-	slog.Warn("FindOne called but not implemented", "filter", filter)
-	return nil, fmt.Errorf("kubernetes: FindOne not yet implemented")
+	slog.Debug("FindOne called", "filter", filter)
+
+	list := &model.HealthEventResourceCRDList{}
+	if err := k.client.List(ctx, list, crclient.InNamespace(k.namespace)); err != nil {
+		return nil, fmt.Errorf("failed to list HealthEventResources: %w", err)
+	}
+
+	if len(list.Items) == 0 {
+		return &k8sEmptySingleResult{}, nil
+	}
+
+	cr := &list.Items[0]
+
+	return &k8sSingleResult{cr: cr}, nil
 }
 
 func (k *KubernetesDatabaseClient) Find(
 	ctx context.Context, filter interface{}, options *client.FindOptions,
 ) (client.Cursor, error) {
-	slog.Warn("Find called but not implemented", "filter", filter)
-	return nil, fmt.Errorf("kubernetes: Find not yet implemented")
+	slog.Debug("Find called", "filter", filter)
+
+	list := &model.HealthEventResourceCRDList{}
+	if err := k.client.List(ctx, list, crclient.InNamespace(k.namespace)); err != nil {
+		return nil, fmt.Errorf("failed to list HealthEventResources: %w", err)
+	}
+
+	items := filterCRsByTime(list.Items, filter)
+
+	if options != nil && options.Limit != nil && *options.Limit > 0 && int64(len(items)) > *options.Limit {
+		items = items[:*options.Limit]
+	}
+
+	slog.Debug("Find listed CRs", "total", len(list.Items), "afterFilter", len(items))
+
+	return newK8sCursor(items), nil
 }
 
 func (k *KubernetesDatabaseClient) CountDocuments(
-	ctx context.Context, filter interface{}, options *client.CountOptions,
+	ctx context.Context, filter interface{}, _ *client.CountOptions,
 ) (int64, error) {
-	slog.Warn("CountDocuments called but not implemented", "filter", filter)
-	return 0, fmt.Errorf("kubernetes: CountDocuments not yet implemented")
+	slog.Debug("CountDocuments called", "namespace", k.namespace, "filter", filter)
+	list := &model.HealthEventResourceCRDList{}
+	if err := k.client.List(ctx, list, crclient.InNamespace(k.namespace)); err != nil {
+		return 0, fmt.Errorf("failed to list HealthEventResources: %w", err)
+	}
+	items := filterCRsByTime(list.Items, filter)
+	return int64(len(items)), nil
 }
 
 func (k *KubernetesDatabaseClient) Aggregate(
-	ctx context.Context, pipeline interface{},
+	_ context.Context, pipeline interface{},
 ) (client.Cursor, error) {
-	slog.Warn("Aggregate called but not implemented")
-	return nil, fmt.Errorf("kubernetes: Aggregate not yet implemented")
+	slog.Debug("Aggregate called on Kubernetes database client", "namespace", k.namespace)
+	return &k8sEmptyCursor{}, nil
 }
 
-func (k *KubernetesDatabaseClient) Ping(ctx context.Context) error {
-	slog.Warn("DatabaseClient Ping called but not implemented")
-	return fmt.Errorf("kubernetes: Ping not yet implemented")
+// k8sEmptyCursor implements client.Cursor returning zero results.
+// Used by Aggregate until full pipeline evaluation is implemented.
+type k8sEmptyCursor struct{}
+
+func (c *k8sEmptyCursor) Next(_ context.Context) bool        { return false }
+func (c *k8sEmptyCursor) Decode(_ interface{}) error          { return fmt.Errorf("cursor exhausted") }
+func (c *k8sEmptyCursor) Close(_ context.Context) error       { return nil }
+func (c *k8sEmptyCursor) All(_ context.Context, _ interface{}) error { return nil }
+func (c *k8sEmptyCursor) Err() error                          { return nil }
+
+func (k *KubernetesDatabaseClient) Ping(_ context.Context) error {
+	return nil
 }
 
 func (k *KubernetesDatabaseClient) NewChangeStreamWatcher(
 	ctx context.Context, tokenConfig client.TokenConfig, pipeline interface{},
 ) (client.ChangeStreamWatcher, error) {
-	slog.Warn("NewChangeStreamWatcher called but not implemented")
-	return nil, fmt.Errorf("kubernetes: NewChangeStreamWatcher not yet implemented")
+	slog.Info("Creating Kubernetes change stream watcher via DatabaseClient",
+		"clientName", tokenConfig.ClientName, "namespace", k.namespace)
+
+	w := NewKubernetesChangeStreamWatcher(k.client, k.namespace, tokenConfig.ClientName)
+
+	return w.Unwrap(), nil
 }
 
 func (k *KubernetesDatabaseClient) DeleteResumeToken(
@@ -240,6 +285,139 @@ func (k *KubernetesDatabaseClient) DeleteResumeToken(
 func (k *KubernetesDatabaseClient) Close(_ context.Context) error {
 	slog.Debug("Kubernetes database client closed")
 	return nil
+}
+
+// filterCRsByTime applies createdAt time range filtering from a MongoDB-style filter map.
+func filterCRsByTime(items []model.HealthEventResourceCRD, filter interface{}) []model.HealthEventResourceCRD {
+	filterMap, ok := filter.(map[string]any)
+	if !ok {
+		return items
+	}
+
+	createdAtRaw, ok := filterMap["createdAt"]
+	if !ok {
+		return items
+	}
+
+	rangeMap, ok := createdAtRaw.(map[string]any)
+	if !ok {
+		return items
+	}
+
+	var gte, lt time.Time
+	if v, ok := rangeMap["$gte"]; ok {
+		if t, ok := v.(time.Time); ok {
+			gte = t
+		}
+	}
+	if v, ok := rangeMap["$lt"]; ok {
+		if t, ok := v.(time.Time); ok {
+			lt = t
+		}
+	}
+
+	var filtered []model.HealthEventResourceCRD
+	for i := range items {
+		ts := items[i].CreationTimestamp.Time
+		if ann := items[i].GetAnnotations(); ann != nil {
+			if raw, ok := ann[originalHealthEventTimestamp]; ok {
+				if parsed, err := parseTime(raw); err == nil {
+					ts = parsed
+				}
+			}
+		}
+		if !gte.IsZero() && ts.Before(gte) {
+			continue
+		}
+		if !lt.IsZero() && !ts.Before(lt) {
+			continue
+		}
+		filtered = append(filtered, items[i])
+	}
+	return filtered
+}
+
+// k8sCursor implements client.Cursor backed by an in-memory slice of CRs.
+type k8sCursor struct {
+	items []model.HealthEventResourceCRD
+	idx   int
+	err   error
+}
+
+func newK8sCursor(items []model.HealthEventResourceCRD) *k8sCursor {
+	return &k8sCursor{items: items, idx: -1}
+}
+
+func (c *k8sCursor) Next(_ context.Context) bool {
+	c.idx++
+	return c.idx < len(c.items)
+}
+
+func (c *k8sCursor) Decode(v interface{}) error {
+	if c.idx < 0 || c.idx >= len(c.items) {
+		return fmt.Errorf("cursor out of bounds")
+	}
+	return decodeCRInto(&c.items[c.idx], v)
+}
+
+func (c *k8sCursor) Close(_ context.Context) error { return nil }
+
+func (c *k8sCursor) All(_ context.Context, results interface{}) error {
+	slice, ok := results.(*[]model.HealthEventWithStatus)
+	if !ok {
+		return fmt.Errorf("All: expected *[]model.HealthEventWithStatus, got %T", results)
+	}
+	for i := range c.items {
+		var hews model.HealthEventWithStatus
+		if err := decodeCRInto(&c.items[i], &hews); err != nil {
+			return err
+		}
+		*slice = append(*slice, hews)
+	}
+	return nil
+}
+
+func (c *k8sCursor) Err() error { return c.err }
+
+// k8sSingleResult implements client.SingleResult for a found CR.
+type k8sSingleResult struct {
+	cr *model.HealthEventResourceCRD
+}
+
+func (r *k8sSingleResult) Decode(v interface{}) error {
+	return decodeCRInto(r.cr, v)
+}
+
+func (r *k8sSingleResult) Err() error { return nil }
+
+// k8sEmptySingleResult implements client.SingleResult for a not-found case.
+type k8sEmptySingleResult struct{}
+
+func (r *k8sEmptySingleResult) Decode(_ interface{}) error {
+	return fmt.Errorf("no documents in result")
+}
+
+func (r *k8sEmptySingleResult) Err() error { return nil }
+
+// decodeCRInto populates the target from a HealthEventResourceCRD.
+func decodeCRInto(cr *model.HealthEventResourceCRD, v interface{}) error {
+	switch target := v.(type) {
+	case *model.HealthEventWithStatus:
+		createdAt := cr.CreationTimestamp.Time
+		if ann := cr.GetAnnotations(); ann != nil {
+			if ts, ok := ann[originalHealthEventTimestamp]; ok {
+				if t, err := parseTime(ts); err == nil {
+					createdAt = t
+				}
+			}
+		}
+		target.CreatedAt = createdAt
+		target.HealthEvent = cr.Spec
+		target.HealthEventStatus = cr.Status
+		return nil
+	default:
+		return fmt.Errorf("decodeCRInto: unsupported target type %T", v)
+	}
 }
 
 var _ client.DatabaseClient = (*KubernetesDatabaseClient)(nil)

@@ -194,14 +194,18 @@ local_resource(
 k8s_yaml(yaml)
 
 # Check if using Percona operator (only relevant when using MongoDB)
-use_percona = effective_values.get('mongodb-store', {}).get('usePerconaOperator', False) if not use_postgresql else False
-if use_percona:
+use_percona = effective_values.get('mongodb-store', {}).get('usePerconaOperator', False) if not (use_postgresql or use_kubernetes) else False
+if use_kubernetes:
+    print("Using Kubernetes CRDs for datastore (no external database needed).")
+elif use_percona:
     print("Using Percona MongoDB Operator for MongoDB installation.")
 else:
     print("Using bitnami MongoDB installation.")
 
 # Determine datastore resource name
-if use_postgresql:
+if use_kubernetes:
+    datastore_resource = 'cert-manager-resources'
+elif use_postgresql:
     datastore_resource = 'nvsentinel-postgresql'
 else:
     datastore_resource = 'mongodb' if not use_percona else 'create-mongodb-database'
@@ -219,7 +223,7 @@ if use_postgresql:
         'postgresql-server-cert:certificate',
         'postgresql-client-cert:certificate'
     ])
-else:
+elif not use_kubernetes:
     if use_percona:
         cert_manager_objects.append('mongo-app-client-cert:certificate')
     else:
@@ -259,8 +263,8 @@ if use_percona:
         resource_deps=['wait-for-cert-manager-crds'],
     )
 
-# MongoDB database creation (only for MongoDB, not PostgreSQL)
-if not use_postgresql:
+# MongoDB database creation (only for MongoDB, not PostgreSQL or Kubernetes)
+if not use_postgresql and not use_kubernetes:
     k8s_resource(
         'create-mongodb-database',
         resource_deps=['wait-for-cert-manager-crds', 'nvsentinel-psmdb-operator'] if use_percona else ['wait-for-cert-manager-crds'],
@@ -351,10 +355,11 @@ k8s_resource(
     resource_deps=[datastore_resource]
 )
 
-k8s_resource(
-    'csp-health-monitor',
-    resource_deps=[datastore_resource, 'csp-api-mock']
-)
+if not use_kubernetes:
+    k8s_resource(
+        'csp-health-monitor',
+        resource_deps=[datastore_resource, 'csp-api-mock']
+    )
 
 k8s_resource(
     'kwok-stage-fast',

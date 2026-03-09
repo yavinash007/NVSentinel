@@ -15,10 +15,14 @@
 package model
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/nvidia/nvsentinel/data-models/pkg/protos"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -43,6 +47,81 @@ type HealthEventResourceCRD struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	Spec              *protos.HealthEvent       `json:"spec,omitempty"`
 	Status            *protos.HealthEventStatus `json:"status,omitempty"`
+}
+
+// MarshalJSON uses protojson for Spec/Status so that protobuf well-known types
+// (Timestamp → RFC3339 string, BoolValue → plain bool) match the CRD schema.
+// Without this, encoding/json serializes Timestamp as {"seconds":...,"nanos":...}
+// which the CRD rejects as "must be of type string".
+func (in HealthEventResourceCRD) MarshalJSON() ([]byte, error) {
+	type helper struct {
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata,omitempty"`
+		Spec              json.RawMessage `json:"spec,omitempty"`
+		Status            json.RawMessage `json:"status,omitempty"`
+	}
+
+	h := helper{
+		TypeMeta:   in.TypeMeta,
+		ObjectMeta: in.ObjectMeta,
+	}
+
+	opts := protojson.MarshalOptions{UseEnumNumbers: true}
+
+	if in.Spec != nil {
+		b, err := opts.Marshal(in.Spec)
+		if err != nil {
+			return nil, fmt.Errorf("protojson marshal spec: %w", err)
+		}
+		h.Spec = b
+	}
+
+	if in.Status != nil {
+		b, err := opts.Marshal(in.Status)
+		if err != nil {
+			return nil, fmt.Errorf("protojson marshal status: %w", err)
+		}
+		h.Status = b
+	}
+
+	return json.Marshal(h)
+}
+
+// UnmarshalJSON uses protojson for Spec/Status to correctly parse RFC3339 timestamps
+// and other protobuf well-known types back into their Go protobuf representations.
+func (in *HealthEventResourceCRD) UnmarshalJSON(data []byte) error {
+	type helper struct {
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata,omitempty"`
+		Spec              json.RawMessage `json:"spec,omitempty"`
+		Status            json.RawMessage `json:"status,omitempty"`
+	}
+
+	var h helper
+	if err := json.Unmarshal(data, &h); err != nil {
+		return err
+	}
+
+	in.TypeMeta = h.TypeMeta
+	in.ObjectMeta = h.ObjectMeta
+
+	opts := protojson.UnmarshalOptions{DiscardUnknown: true}
+
+	if len(h.Spec) > 0 {
+		in.Spec = &protos.HealthEvent{}
+		if err := opts.Unmarshal(h.Spec, in.Spec); err != nil {
+			return fmt.Errorf("protojson unmarshal spec: %w", err)
+		}
+	}
+
+	if len(h.Status) > 0 {
+		in.Status = &protos.HealthEventStatus{}
+		if err := opts.Unmarshal(h.Status, in.Status); err != nil {
+			return fmt.Errorf("protojson unmarshal status: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (in *HealthEventResourceCRD) DeepCopyObject() runtime.Object {
@@ -93,9 +172,15 @@ func (in *HealthEventResourceCRDList) DeepCopyObject() runtime.Object {
 }
 
 // AddToScheme registers the HealthEventResource types with the given scheme.
+// We use AddKnownTypeWithName because the Go struct is named HealthEventResourceCRD
+// but the CRD kind is HealthEventResource (without the CRD suffix).
 func AddToScheme(scheme *runtime.Scheme) error {
-	scheme.AddKnownTypes(SchemeGroupVersion,
+	scheme.AddKnownTypeWithName(
+		SchemeGroupVersion.WithKind("HealthEventResource"),
 		&HealthEventResourceCRD{},
+	)
+	scheme.AddKnownTypeWithName(
+		SchemeGroupVersion.WithKind("HealthEventResourceList"),
 		&HealthEventResourceCRDList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)

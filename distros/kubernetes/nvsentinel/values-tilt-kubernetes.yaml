@@ -33,6 +33,11 @@ global:
   mongodbStore:
     enabled: false
 
+  # csp-health-monitor uses MaintenanceEvents with a legacy MongoDB-only code path;
+  # disable it when using the Kubernetes CRD datastore for HealthEvents
+  cspHealthMonitor:
+    enabled: false
+
   # Enable the CRD subchart so HealthEventResource CRD is installed
   k8sdatastoreCrds:
     enabled: true

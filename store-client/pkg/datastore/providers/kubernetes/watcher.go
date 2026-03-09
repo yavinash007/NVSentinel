@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/nvidia/nvsentinel/data-models/pkg/model"
 	"github.com/nvidia/nvsentinel/store-client/pkg/client"
@@ -75,6 +76,12 @@ func (w *KubernetesChangeStreamWatcher) Start(ctx context.Context) {
 		defer close(w.oldEventChan)
 		defer close(w.eventChan)
 
+		const (
+			initialBackoff = 1 * time.Second
+			maxBackoff     = 30 * time.Second
+		)
+		backoff := initialBackoff
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -91,10 +98,19 @@ func (w *KubernetesChangeStreamWatcher) Start(ctx context.Context) {
 			list := &model.HealthEventResourceCRDList{}
 			watcher, err := w.k8sClient.Watch(ctx, list, crclient.InNamespace(w.namespace))
 			if err != nil {
-				slog.Error("Failed to start Kubernetes watch, will retry", "error", err, "clientName", w.clientName)
+				slog.Error("Failed to start Kubernetes watch, will retry", "error", err, "clientName", w.clientName, "retryIn", backoff)
+				select {
+				case <-time.After(backoff):
+				case <-ctx.Done():
+					return
+				case <-w.stopCh:
+					return
+				}
+				backoff = min(backoff*2, maxBackoff)
 				continue
 			}
 
+			backoff = initialBackoff
 			slog.Info("Kubernetes watch established", "clientName", w.clientName)
 			w.processWatchEvents(ctx, watcher)
 			watcher.Stop()
